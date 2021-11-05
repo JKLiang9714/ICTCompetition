@@ -1,7 +1,6 @@
 import json
 import sys
 import copy
-from typing import ByteString
 import numpy as np
 
 SMALL_JOB_NUM = 5
@@ -19,8 +18,8 @@ JOB_FACTOR = [-0.0002 * i * i * i - 0.0063 * i * i + 1.0065 * i for i in range(1
 
 def top_k(arr, k):
     top_k_index = np.argsort(arr)[:k]
-    top_k = np.array(arr)[top_k_index]
-    return top_k, top_k_index
+    top_K = np.array(arr)[top_k_index]
+    return top_K, top_k_index
 
 
 def core_time_steps(core_time_list):
@@ -40,7 +39,7 @@ def get_best_job(unsched_job, unsched_job_core_list):
     best_job = None
     for i in range(len(unsched_job)):
         job = unsched_job[i]
-        sched_ratio = unsched_job_core_list[i] / job.scoreNum
+        sched_ratio = unsched_job_core_list[i] / job.coreNum
         if sched_ratio > max_sched_ratio:
             max_sched_ratio, best_job, best_index = sched_ratio, job, i
     return best_job, best_index
@@ -73,10 +72,10 @@ def placement(job_list, core_list, host_list, core_time_list, batchJobPlans):
         for host in host_list:
             best_core = None
             min_start_time = sys.maxsize
-            for core in in host.get_core_list():
+            for core in host.get_core_list():
                 if job_in_core[core.get_id()] == -1:
                     continue
-                start_time = core_combined_local_block(host.get_highest_comm_time(), core_time_list)
+                start_time = core.combined_local_block(host.get_highest_comm_time(), core_time_list)
                 if start_time < min_start_time:
                     best_core, min_start_time = core, start_time
             if min_start_time != sys.maxsize:
@@ -87,14 +86,14 @@ def placement(job_list, core_list, host_list, core_time_list, batchJobPlans):
                     unsched_block_num = job.padding_comm_block(padding_time, host.get_host_id(), best_core.get_id(),
                                                                                        core_time_list, unsched_block_num)
                     #unsched_block_num = job.padding_comm_block(padding_time, host.get_host_id(), best_core.get_id(),
-                    #                                                                  core_time_list, unsched_block_num                                                               
+                    #                                                                  core_time_list, unsched_block_num)                                                              
                 host.last_sched_core = best_core
             if best_core:
                 # print(len(best_core.prep_block))
                 job_index = job_in_core[best_core.get_id()]
                 job = job_list[job_index]
                 unsched_local_block_num, unsched_block_num = job.schedule_block(unsched_block_num,
-                                                                                unnsched_local_block_num, best_core,
+                                                                                unsched_local_block_num, best_core,
                                                                                 host, core_time_list,
                                                                                 batchJobPlans is not None)
     
@@ -173,12 +172,12 @@ class Core:
             self.prep_block = self.localBlocks
             return sys.maxsize
         
-        block_list = []
-        block_sum = []
+        blocks_list = []
+        blocks_sum = []
         helper(core_time_list[self.id], [], 0)
-        best_index = block_sum.index(min(block_sum))
-        self.prep_block = block_list[best_index]
-        return block_sum[best_index]
+        best_index = blocks_sum.index(min(blocks_sum))
+        self.prep_block = blocks_list[best_index]
+        return blocks_sum[best_index]
 
 
     def get_current_time_point(self):
@@ -188,8 +187,8 @@ class Core:
         return self.prep_block
 
 class Job:
-    totalSize = 0
-    coreNum = 0
+    totalSize = 0 # 总Block大小
+    coreNum = 0 # 需要多少core
 
     def __init__(self, jobId, calcSpeed, blocks):
         self.jobId = jobId
@@ -220,9 +219,9 @@ class Job:
                 self.hostTotalSize[host_id] += block.get_size()
 
         for i in range(len(self.blockInHost)):
-            self.blockInHost[i].sort(key=lambda x: x.get_size(), reversed=True)
+            self.blockInHost[i].sort(key=lambda x: x.get_size(), reverse=True)
 
-    def ComputeCommTime(self):
+    def computeCommTime(self):
         for block in self.blocks:
             block.compute_comm_time()
 
@@ -245,7 +244,7 @@ class Job:
                 if sched_time + calc_time + comm_time < padding_time:
                     delete_block.append(block)
                     sched_time += calc_time + comm_time
-        for  i in range(0. host_id):
+        for  i in range(0, host_id):
             block_list = self.blockInHost[i]
             for block in block_list:
                 if block in delete_block:
@@ -266,10 +265,10 @@ class Job:
 
 
     def schedule_block(self, unsched_block_num, unsched_local_block_num, core, host, core_time_list, in_output):
-        local_block_calc_time = 0
+        local_blocks_calc_time = 0
         delete_block = []
         for block in core.get_prep_block():
-            local_block_calc_time += block.get_calc_time()
+            local_blocks_calc_time += block.get_calc_time()
             delete_block.append(block)
             if is_output:
                 self.cores[core.get_id()].append(block.get_block_id())
@@ -277,7 +276,7 @@ class Job:
             core.localBlocks.remove(block)
             unsched_local_block_num -= 1
             unsched_block_num -= 1
-        core_time_list[core.get_id()] += local_block_calc_time
+        core_time_list[core.get_id()] += local_blocks_calc_time
         best_block = None
         max_block_size = -1
 
@@ -339,52 +338,52 @@ class Job:
                     self.blockInHost[i].remove(block)
                     self.hostTotalSize[i] -= block.get_size()
 
-        # WF
-        for block in remaining_blocks:
-            worst_fit_index = -1
-            worst_fit_time = sys.maxsize
-            for i in best_core_index:
-                if i not in sched_core_index and sched_core_num >= self.coreNum：
-                    continue
-                host_id = core_list[i].get_host_id()
-                start_time = core_time_list[i]
-                comm_time = block.get_comm_time_by_host(host_id, start_time, core_list[host_id * 20:host_id * 20 + 20])
-                total_time = core_time_list[i] + comm_time + block.get_calc_time()
-
-                if total_time <= worst_fit_time:
-                    worst_fit_time, worst_fit_index = total_time, i
-
-            core_time_list[worst_fit_index] = worst_fit_time
-            if is_output:
-                self.cores[worst_fit_index].append(block.get_block_id())
-            self.adjust_comm_time(core_time_list, worst_fit_index, core_list, block)
-            if worst_fit_index not in sched_core_index:
-                core_in_host[worst_fit_index // CORE_PER_NODE] += 1
-                sched_core_index.add(worst_fit_index)
-                job_in_core[worst_fit_index] = self.jobId
-                sched_core_num += 1
-
-    
-    def adjust_comm_time(self, core_time_list, best_index, core_list, cur_block):
-        start_time = core_time_list[best_index]
-        host_id = core_list[best_index].get_host_id()
-        comm_end_time = start_time + cur_block.get_comm_time_by_host(host_id, start_time,
-                                                                     core_list[host_id * 20:host_id * 20 + 20])
-        if start_time == comm_end_time:
-            return
-        cur_block.startTime = start_time
-        cur_block.commEndTime = comm_end_time
-        for i in range(host_id * 20, host_id * 20 + 20):
-            core = core_list[i]
-            rollover = 0
-            for block in core.get_blocks():
-                block.startTime += rollover
-                block.commEndTime += rollover
-                if start_time <= block.startTime < comm_end_time:
-                    block.commEndTime += block.get_comm_time()
-                    rollover += block.get_comm_time()
-            core_time_list[i] += rollover
-        core_list[best_index].get_blocks().append(cur_block)
+#        # WF
+#        for block in remaining_blocks:
+#            worst_fit_index = -1
+#            worst_fit_time = sys.maxsize
+#            for i in best_core_index:
+#                if i not in sched_core_index and sched_core_num >= self.coreNum：
+#                    continue
+#                host_id = core_list[i].get_host_id()
+#                start_time = core_time_list[i]
+#                comm_time = block.get_comm_time_by_host(host_id, start_time, core_list[host_id * 20:host_id * 20 + 20])
+#                total_time = core_time_list[i] + comm_time + block.get_calc_time()
+#
+#                if total_time <= worst_fit_time:
+#                    worst_fit_time, worst_fit_index = total_time, i
+#
+#            core_time_list[worst_fit_index] = worst_fit_time
+#            if is_output:
+#                self.cores[worst_fit_index].append(block.get_block_id())
+#            self.adjust_comm_time(core_time_list, worst_fit_index, core_list, block)
+#            if worst_fit_index not in sched_core_index:
+#                core_in_host[worst_fit_index // CORE_PER_NODE] += 1
+#                sched_core_index.add(worst_fit_index)
+#                job_in_core[worst_fit_index] = self.jobId
+#                sched_core_num += 1
+#
+#    
+#    def adjust_comm_time(self, core_time_list, best_index, core_list, cur_block):
+#        start_time = core_time_list[best_index]
+#        host_id = core_list[best_index].get_host_id()
+#        comm_end_time = start_time + cur_block.get_comm_time_by_host(host_id, start_time,
+#                                                                     core_list[host_id * 20:host_id * 20 + 20])
+#        if start_time == comm_end_time:
+#            return
+#        cur_block.startTime = start_time
+#        cur_block.commEndTime = comm_end_time
+#        for i in range(host_id * 20, host_id * 20 + 20):
+#            core = core_list[i]
+#            rollover = 0
+#            for block in core.get_blocks():
+#                block.startTime += rollover
+#                block.commEndTime += rollover
+#                if start_time <= block.startTime < comm_end_time:
+#                    block.commEndTime += block.get_comm_time()
+#                    rollover += block.get_comm_time()
+#            core_time_list[i] += rollover
+#        core_list[best_index].get_blocks().append(cur_block)
 
     def build_host_plan(self):
         res = {'jobId': self.jobId}
@@ -425,13 +424,13 @@ class Block:
     def get_comm_time_by_host(self, host_id):
         if host_id in self.hostIds:
             return 0
-        n = 1
-        for core in core_list:
-            for block in core.get_blocks():
-                if block.startTime <= start_time < block.commEndTime:
-                    n += 1
-                elif block.startTime > start_time:
-                    break
+#        n = 1
+#        for core in core_list:
+#            for block in core.get_blocks():
+#                if block.startTime <= start_time < block.commEndTime:
+#                    n += 1
+#                elif block.startTime > start_time:
+#                    break
         return self.commTime
 
     def computeCalcTime(self, n, calc_speed):
@@ -450,8 +449,8 @@ class Block:
 
 class HostPlan:
     hostId = 0
-    coreNum = 0
-    corePlans = []
+    coreNum = 0  # 需要用几个core
+    corePlans = [] # 用到的每个core需要计算的block_id
 
     def __init__(self, coreNum, corePlans):
         self.coreNum = coreNum
@@ -486,13 +485,13 @@ class Solution:
     
     @staticmethod
     def allocateCoreForTopJob(job_list: list, core_time_list, core_list, host_list, batchJobPlans):
-        a = [26, 20, 16, 8, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2]
-        for i in range(len(job_list)):
-            job = job_list[i]
-            job.coreNum = a[i]
-            job.computeCalcTime()
-        placement(job_list, core_list, core_time_list, is_back_fill=False, batchJobPlans=batchJobPlans)
-        return
+#        a = [26, 20, 16, 8, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2]
+#        for i in range(len(job_list)):
+#            job = job_list[i]
+#            job.coreNum = a[i]
+#            job.computeCalcTime()
+#        placement(job_list, core_list, core_time_list, is_back_fill=False, batchJobPlans=batchJobPlans)
+#        return
 
         for i in range(len(job_list)):
             job = job_list[i]
@@ -524,60 +523,60 @@ class Solution:
                 break
         placement(job_list, core_list, host_list, core_time_list, batchJobPlans=batchJobPlans)
 
-    @staticmethod
-    def backFilling(job_list: list, core_time_list: list, core_list: list, batchJobPlans):
-        maxCoreTime = max(core_time_list)
-        print(core_time_list)
-        print(maxCoreTime)
-        while 1:
-            sched_job_id = []
-            core_time_list_copy = copy.deepcopy(core_time_list)
-            unsched_job_list = copy.copy(job_list)
-            time_step = core_time_steps(core_time_list_copy)
-            core_list_copy = copy.deepcopy(core_list)
-            print(time_step)
-            black = 0
-            while len(unsched_job_list) != 0:
-                sched_flag = 0
-
-                for job in unsched_job_list:
-                    job.coreNum = time_step[0][1]
-                    job.computeCalcTime()
-                    time_list, _, waste_time = placement([job], core_list_copy, copy.deepcopy(core_time_list_copy),
-                                                        batchJobPlans=None)
-                    if waste_time > black:
-                        continue
-                    else:
-                        time = max(time_list)
-                        if time <= maxCoreTime:
-                            unsched_job_list.remove(job)
-                            sched_job_id.append(job.get_job_id())
-                            placement([job], core_list_copy, core_time_list_copy, is_back_fill=True, batchJobPlans=None)
-
-                            sched_flag = 1
-                            break
-                if sched_flag:
-                    time_step = core_time_steps(core_time_list_copy)
-                    print(time_steps)
-                else:
-                    if len(time_steps) != 1:
-                        core_num = time_steps[0][1]
-                        time_steps[1][1] += core_num
-                        black += (time_steps[1][0] - time_steps[0][0]) * core_num
-                        time_step.pop(0)
-                    else:
-                        break
-            if len(unsched_job_list) == 0:
-                for job_id in sched_job_id:
-                    for job in job_list:
-                        if job.get_job_id() == job_id:
-                            placement([job], core_list, core_time_list, is_back_fill=True,
-                                      batchJobPlans=batchJobPlans)
-                break
-            # 在limitTime限制内装不下，就缓慢加上限100ms
-            maxCoreTime += 5000
-            print(maxCoreTime)
-            print(maxCoreTime)
+#    @staticmethod
+#    def backFilling(job_list: list, core_time_list: list, core_list: list, batchJobPlans):
+#        maxCoreTime = max(core_time_list)
+#        print(core_time_list)
+#        print(maxCoreTime)
+#        while 1:
+#            sched_job_id = []
+#            core_time_list_copy = copy.deepcopy(core_time_list)
+#            unsched_job_list = copy.copy(job_list)
+#            time_step = core_time_steps(core_time_list_copy)
+#            core_list_copy = copy.deepcopy(core_list)
+#            print(time_step)
+#            black = 0
+#            while len(unsched_job_list) != 0:
+#                sched_flag = 0
+#
+#                for job in unsched_job_list:
+#                    job.coreNum = time_step[0][1]
+#                    job.computeCalcTime()
+#                    time_list, _, waste_time = placement([job], core_list_copy, copy.deepcopy(core_time_list_copy),
+#                                                        batchJobPlans=None)
+#                    if waste_time > black:
+#                        continue
+#                    else:
+#                        time = max(time_list)
+#                        if time <= maxCoreTime:
+#                            unsched_job_list.remove(job)
+#                            sched_job_id.append(job.get_job_id())
+#                            placement([job], core_list_copy, core_time_list_copy, is_back_fill=True, batchJobPlans=None)
+#
+#                            sched_flag = 1
+#                            break
+#                if sched_flag:
+#                    time_step = core_time_steps(core_time_list_copy)
+#                    print(time_steps)
+#                else:
+#                    if len(time_steps) != 1:
+#                        core_num = time_steps[0][1]
+#                        time_steps[1][1] += core_num
+#                        black += (time_steps[1][0] - time_steps[0][0]) * core_num
+#                        time_step.pop(0)
+#                    else:
+#                        break
+#            if len(unsched_job_list) == 0:
+#                for job_id in sched_job_id:
+#                    for job in job_list:
+#                        if job.get_job_id() == job_id:
+#                            placement([job], core_list, core_time_list, is_back_fill=True,
+#                                      batchJobPlans=batchJobPlans)
+#                break
+#            # 在limitTime限制内装不下，就缓慢加上限100ms
+#            maxCoreTime += 5000
+#            print(maxCoreTime)
+#            # print(maxCoreTime)
 
         def schedulingJob(self, batchJobs: dict) -> dict:
             global SMALL_JOB_NUM
@@ -586,6 +585,7 @@ class Solution:
                 SMALL_JOB_NUM = 4
                 pass
             else:
+                # first dataset    42->4745780.0457
                 SMALL_JOB_NUM = 117
 
             host_list = []
@@ -612,7 +612,7 @@ class Solution:
 
             self.allocateCoreForTopJob(job_list[:-SMALL_JOB_NUM], core_time_list, core_list, host_list, batchJobPlans)
 
-            self.backFilling(job_list[-SMALL_JOB_NUM:], core_time_list, core_list, batchJobPlans)
+            # self.backFilling(job_list[-SMALL_JOB_NUM:], core_time_list, core_list, batchJobPlans)
             print([job_list[i].coreNum for i in range(len(job_list))])
             print(max(core_time_list))
             result = {
