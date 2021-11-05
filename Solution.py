@@ -264,7 +264,7 @@ class Job:
         return unsched_block_num
 
 
-    def schedule_block(self, unsched_block_num, unsched_local_block_num, core, host, core_time_list, in_output):
+    def schedule_block(self, unsched_block_num, unsched_local_block_num, core, host, core_time_list, is_output):
         local_blocks_calc_time = 0
         delete_block = []
         for block in core.get_prep_block():
@@ -343,7 +343,7 @@ class Job:
 #            worst_fit_index = -1
 #            worst_fit_time = sys.maxsize
 #            for i in best_core_index:
-#                if i not in sched_core_index and sched_core_num >= self.coreNum：
+#                if i not in sched_core_index and sched_core_num >= self.coreNum:
 #                    continue
 #                host_id = core_list[i].get_host_id()
 #                start_time = core_time_list[i]
@@ -362,8 +362,8 @@ class Job:
 #                sched_core_index.add(worst_fit_index)
 #                job_in_core[worst_fit_index] = self.jobId
 #                sched_core_num += 1
-#
-#    
+
+    
 #    def adjust_comm_time(self, core_time_list, best_index, core_list, cur_block):
 #        start_time = core_time_list[best_index]
 #        host_id = core_list[best_index].get_host_id()
@@ -450,7 +450,7 @@ class Block:
 class HostPlan:
     hostId = 0
     coreNum = 0  # 需要用几个core
-    corePlans = [] # 用到的每个core需要计算的block_id
+    corePlans = [] # 用到的每个core需要计算的block id
 
     def __init__(self, coreNum, corePlans):
         self.coreNum = coreNum
@@ -532,17 +532,18 @@ class Solution:
 #            sched_job_id = []
 #            core_time_list_copy = copy.deepcopy(core_time_list)
 #            unsched_job_list = copy.copy(job_list)
-#            time_step = core_time_steps(core_time_list_copy)
+#            time_steps = core_time_steps(core_time_list_copy)
 #            core_list_copy = copy.deepcopy(core_list)
-#            print(time_step)
+#            print(time_steps)
 #            black = 0
 #            while len(unsched_job_list) != 0:
 #                sched_flag = 0
 #
 #                for job in unsched_job_list:
-#                    job.coreNum = time_step[0][1]
+#                    job.coreNum = time_steps[0][1]
 #                    job.computeCalcTime()
 #                    time_list, _, waste_time = placement([job], core_list_copy, copy.deepcopy(core_time_list_copy),
+#
 #                                                        batchJobPlans=None)
 #                    if waste_time > black:
 #                        continue
@@ -556,14 +557,14 @@ class Solution:
 #                            sched_flag = 1
 #                            break
 #                if sched_flag:
-#                    time_step = core_time_steps(core_time_list_copy)
+#                    time_steps = core_time_steps(core_time_list_copy)
 #                    print(time_steps)
 #                else:
 #                    if len(time_steps) != 1:
 #                        core_num = time_steps[0][1]
 #                        time_steps[1][1] += core_num
 #                        black += (time_steps[1][0] - time_steps[0][0]) * core_num
-#                        time_step.pop(0)
+#                        time_steps.pop(0)
 #                    else:
 #                        break
 #            if len(unsched_job_list) == 0:
